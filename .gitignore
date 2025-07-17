@@ -1,0 +1,11 @@
+
+out
+
+Packages
+
+# Project place file
+/Parallel-Jecs.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock

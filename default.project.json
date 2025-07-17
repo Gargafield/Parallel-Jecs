@@ -1,0 +1,27 @@
+{
+  "name": "Parallel-Jecs",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$ignoreUnknownInstances": true,
+      "$path": "out/shared",
+      "Packages": {
+        "$path": "Packages"
+      }
+    },
+    "ServerScriptService": {
+      "$path": "out/server"
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "$path": "out/client"
+      }
+    },
+    "Workspace": {
+      "$ignoreUnknownInstances": true
+    },
+    "Lighting": {
+      "$ignoreUnknownInstances": true
+    }
+  }
+}

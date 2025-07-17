@@ -1,0 +1,8 @@
+[package]
+name = "gargafield/parallel-jecs"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+Jecs = "ukendio/jecs@0.8.3"

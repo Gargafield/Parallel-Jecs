@@ -1,0 +1,30 @@
+{
+    "generator": "retain_lines",
+    "rules": [
+        {
+            "rule": "convert_require",
+            "current": {
+                "name": "path",
+                "sources": {
+                    "Packages": "Packages",
+                    "shared": "src/shared",
+                    "client": "src/client",
+                    "server": "src/server"
+                }
+            },
+            "target": {
+                "name": "roblox",
+                "rojo_sourcemap": "./sourcemap.json",
+                "indexing_style": "property"
+            }
+        },
+        "remove_comments",
+        "compute_expression",
+        "remove_unused_if_branch",
+        "remove_unused_while",
+        "filter_after_early_return",
+        "remove_empty_do",
+        "convert_index_to_field",
+        "remove_nil_declaration"
+    ]
+}

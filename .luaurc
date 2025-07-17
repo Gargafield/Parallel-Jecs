@@ -1,0 +1,10 @@
+{
+  "languageMode": "strict",
+  "aliases": {
+    "Packages": "Packages",
+    "shared": "src/shared",
+    "client": "src/client",
+    "server": "src/server",
+    "lune": "~/.lune/.typedefs/0.9.4/"
+  }
+}
