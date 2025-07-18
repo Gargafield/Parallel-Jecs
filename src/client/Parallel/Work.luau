@@ -20,7 +20,7 @@ return function(actor: Actor)
         modules[module] = require(module) :: any
     end)
 
-    actor:BindToMessageParallel("run", function(caller: Actor, module: ModuleScript, componentMap: { [string]: number }, count: number, partition: { any })
+    actor:BindToMessageParallel("run", function(caller: Actor, module: ModuleScript, componentMap: { [string]: number }, count: number, columns: { { any } })
         -- print(`{id}: Running module {module.Name}`)
         local func = modules[module]
         if not func then
@@ -34,22 +34,21 @@ return function(actor: Actor)
         
         local world = {
             set = function(self, entity: number, component, value: any)
-                partition[entity + component] = value
+                columns[component][entity] = value
             end,
         }
 
-        local index = 0
+        local index = 1
         func(world, componentMap, function(): any
-            if index >= count then
+            if index > count then
                 return nil
             end
-
-            local offset = index * (componentCount + 1) + 1
+            local entity = index
             index += 1
 
-            return offset, partition[offset + 1], partition[offset + 2]
+            return entity, columns[1][entity], columns[2][entity]
         end)
 
-        caller:SendMessage("receive", id, partition)
+        caller:SendMessage("receive", id, columns)
     end)
 end

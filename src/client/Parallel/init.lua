@@ -58,45 +58,67 @@ return function(workers: number, world: jecs.World)
 
     local partitions = {}
     for i = 1, workers do
-        partitions[i] = table.create(100)
+        partitions[i] = {}
     end
 
     local componentCount = 0
     local components = {}
     local partitionsDone = 0
     local partitionIndex = 0
+    local recieved_partitions = {}
+    local recieved_columns = {}
+    local archetype : jecs.Archetype = nil
+    local used_columns = {}
+    local columns : { { { number } } } = {}
+    local count = 0
 
     local running = coroutine.running()
-    local connection = actor:BindToMessageParallel("receive", function(id: number, partition: { any })
+    local connection = actor:BindToMessage("receive", function(id: number, partition: { any })
         debug.profilebegin("Partition Received")
-        local columns_map = nil
-        for i = 1, #partition, componentCount + 1 do
-            local entity = partition[i]
-            local record = jecs.entity_index_try_get(world.entity_index, entity) :: jecs.Record
-            if not record then continue end
-            if not columns_map then
-                columns_map = record.archetype.columns_map
-            end
-            
-            columns_map[components[1]][record.row] = partition[i + 1]
-            -- for j = 1, componentCount do
-            --     columns_map[components[j]][record.row] = partition[i + j]
-            -- end
-        end
+        recieved_partitions[id] = partition
         partitionsDone += 1
         debug.profileend()
         if partitionsDone >= partitionIndex then
+            debug.profilebegin("Join Partitions")
+            for i = 1, workers do
+                for j = 1, #used_columns do
+                    table.move(
+                        recieved_partitions[i][j],
+                        1,
+                        columns[j][i][2],
+                        columns[j][i][1],
+                        recieved_columns[j]
+                    )
+                end
+            end
+            for i = 1, #used_columns do
+                table.clear(used_columns[i])
+                table.move(
+                    recieved_columns[i],
+                    1,
+                    count,
+                    1,
+                    used_columns[i]
+                )
+            end
+            debug.profileend()
+
             task.synchronize()
             task.spawn(running)
-        end
+        end 
     end)
 
     return function<T...>(query: jecs.Query<T...>, callback: ModuleScript)
         debug.profilebegin("Intro Work")
         local inner = (query :: any) :: jecs.QueryInner
-        
+
+        if #inner.compatible_archetypes > 1 then
+            error("Query must have a single compatible archetype.")
+        end
+
         running = coroutine.running()
         partitionsDone = 0
+        partitionIndex = 0
         components = inner.ids
         componentCount = #inner.ids
         
@@ -111,9 +133,9 @@ return function(workers: number, world: jecs.World)
         local componentMap = {}
         for i, componentId in inner.ids do
             componentMap[world:get(componentId, jecs.Name)] = i
-        end        
+        end
 
-        local count = countQuery(query :: any)
+        count = countQuery(query :: any)
         if count == 0 then
             debug.profileend()
             return
@@ -121,34 +143,62 @@ return function(workers: number, world: jecs.World)
         debug.profileend()
 
         -- loop through query and split into partitions
-        debug.profilebegin("Partition Creation")
+        debug.profilebegin("Column Creation")
+        archetype = inner.compatible_archetypes[1]
+
+        table.clear(used_columns)
+        for i = 1, #inner.ids do
+            used_columns[i] = archetype.columns_map[inner.ids[i]]
+        end
+
         local distribution = math.max(math.ceil(count / #work_group), 10)
-        partitionIndex = 1
-        local partitionCount = 0
-        local partition = partitions[partitionIndex]
-
-        for entity, a, b in query do
-            local offset = partitionCount * (componentCount + 1) + 1
-            partition[offset] = entity
-            partition[offset + 1] = a
-            partition[offset + 2] = b
-            partitionCount += 1
-
-            if partitionCount >= distribution then
-                debug.profilebegin("Send Partition")
-                work_group[partitionIndex]:SendMessage("run", actor, callback, componentMap, partitionCount, partition)
-                partitionIndex += 1
-                partitionCount = 0
-                partition = partitions[partitionIndex]
-                debug.profileend()
+        for i = 1, #used_columns do
+            if not columns[i] then
+                columns[i] = {}
+                for j = 1, workers do
+                    columns[i][j] = { 1, 1 }
+                end
+            else
+                for j = 1, workers do
+                    columns[i][j][1] = 1
+                    columns[i][j][2] = 1
+                end
+            end
+            if not recieved_columns[i] then
+                recieved_columns[i] = table.create(count)
+            else
+                table.clear(recieved_columns[i])
             end
         end
-        if partitionCount > 0 then
-            debug.profilebegin("Send Partition")
-            work_group[partitionIndex]:SendMessage("run", actor, callback, componentMap, partitionCount, partition)
+        debug.profileend()
+        debug.profilebegin("Partition Creation")
+        local counter = count
+        for i = 1, workers do
+            local localDistribution = math.min(counter, distribution)
+            if localDistribution <= 0 then break end
+            debug.profilebegin("Column Move")
+            for j = 1, #used_columns do
+                if not partitions[i][j] then
+                    partitions[i][j] = table.create(localDistribution)
+                else
+                    table.clear(partitions[i][j])
+                end
+                local index = count - counter + 1
+                
+                table.move(
+                    used_columns[j],
+                    index,
+                    index + localDistribution,
+                    1,
+                    partitions[i][j]
+                )
+                columns[j][i][1] = index
+                columns[j][i][2] = localDistribution
+            end
+            counter -= localDistribution
             debug.profileend()
-        else
-            partitionIndex -= 1
+            partitionIndex += 1
+            work_group[i]:SendMessage("run", actor, callback, componentMap, localDistribution, partitions[i])
         end
         debug.profileend()
 

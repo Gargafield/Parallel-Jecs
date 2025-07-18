@@ -67,7 +67,9 @@ local function countQuery<T...>(query: jecs.Query<T...>)
     return count
 end
 
--- RunService.Heartbeat:Connect(function(deltaTime)
+-- local deltaTime = 1 / 60
+-- while true do
+--     task.wait()
 --     local start = os.clock()
 --     canvas:Clear()
 --     debug.profilebegin("Render")
@@ -121,22 +123,21 @@ end
 --     debug.profileend()
 --     for entity, position, velocity in query do
 --         debug.profilebegin("UpdatePosition")
---             local sum = vector.zero
---             for i = 1, 10 do
---                 sum += velocity * deltaTime
---             end
+--         -- local sum = vector.zero
+--         -- for i = 1, 10 do
+--         --     sum += velocity * deltaTime
+--         -- end
 --         world:set(entity, Position, position + velocity * deltaTime)
 --         debug.profileend()
 --     end
 --     debug.profileend()
 --     local stop = os.clock()
 --     print("Frame time:", (stop - start) * 1000)
--- end)
+-- end
 
-local start
 while true do
     task.wait()
-    start = os.clock()
+    local start = os.clock()
     canvas:Clear()
     debug.profilebegin("Render")
     debug.profilebegin("QueryRender")
