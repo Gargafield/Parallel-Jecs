@@ -14,7 +14,10 @@
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "$path": "src/client"
+        "Client": {
+          "$className": "Actor",
+          "$path": "src/client"
+        }
       }
     },
     "Workspace": {

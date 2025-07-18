@@ -1,3 +1,7 @@
+--!native
+--!optimize 2
+--!strict
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -51,7 +55,7 @@ local Parallel = require("@client/Parallel")
 
 local parallel = Parallel(8, world)
 
-local maxCount = 10000
+local maxCount = 50000
 local spawnCount = 100
 
 local function countQuery<T...>(query: jecs.Query<T...>)
@@ -64,6 +68,7 @@ local function countQuery<T...>(query: jecs.Query<T...>)
 end
 
 -- RunService.Heartbeat:Connect(function(deltaTime)
+--     local start = os.clock()
 --     canvas:Clear()
 --     debug.profilebegin("Render")
 --     debug.profilebegin("QueryRender")
@@ -103,6 +108,7 @@ end
 --         if position.y > 255 then
 --             world:delete(entity)
 --             count -= 1
+--             debug.profileend()
 --             continue
 --         end
 --         debug.profileend()
@@ -115,14 +121,22 @@ end
 --     debug.profileend()
 --     for entity, position, velocity in query do
 --         debug.profilebegin("UpdatePosition")
+--             local sum = vector.zero
+--             for i = 1, 10 do
+--                 sum += velocity * deltaTime
+--             end
 --         world:set(entity, Position, position + velocity * deltaTime)
 --         debug.profileend()
 --     end
 --     debug.profileend()
+--     local stop = os.clock()
+--     print("Frame time:", (stop - start) * 1000)
 -- end)
 
+local start
 while true do
     task.wait()
+    start = os.clock()
     canvas:Clear()
     debug.profilebegin("Render")
     debug.profilebegin("QueryRender")
@@ -161,14 +175,10 @@ while true do
     local first = true
     for entity, position in query do
         debug.profilebegin("CheckPosition")
-        if first then
-            first = false
-            print("Checking position for", entity, position)
-        end
-
         if position.y > 255 then
             world:delete(entity)
             count -= 1
+            debug.profileend()
             continue
         end
         debug.profileend()
@@ -176,4 +186,6 @@ while true do
     debug.profileend()
 
     parallel(world:query(Position, Velocity), UpdatePosition)
+    local stop = os.clock()
+    print("Frame time:", (stop - start) * 1000)
 end

@@ -20,20 +20,16 @@ return function(actor: Actor)
         modules[module] = require(module) :: any
     end)
 
-    actor:BindToMessageParallel("run", function(module: ModuleScript, components: { [number]: { number | string} })
+    actor:BindToMessageParallel("run", function(caller: Actor, module: ModuleScript, componentMap: { [string]: number }, count: number, partition: { any })
         -- print(`{id}: Running module {module.Name}`)
         local func = modules[module]
         if not func then
             error("Module not loaded: " .. module.Name)
         end
 
-        local componentCount = #components
-        local partition = sharedTable[id]
-        local count = partition["count"]
-
-        local componentsMap = {}
-        for i, component in components do
-            componentsMap[component[2]] = i
+        local componentCount = 0
+        for _, _ in componentMap do
+            componentCount += 1
         end
         
         local world = {
@@ -43,15 +39,17 @@ return function(actor: Actor)
         }
 
         local index = 0
-        func(world, componentsMap, function(): any
+        func(world, componentMap, function(): any
             if index >= count then
                 return nil
             end
 
-            local offset = index * (componentCount + 1)
+            local offset = index * (componentCount + 1) + 1
             index += 1
 
             return offset, partition[offset + 1], partition[offset + 2]
         end)
+
+        caller:SendMessage("receive", id, partition)
     end)
 end

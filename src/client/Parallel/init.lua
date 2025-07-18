@@ -13,17 +13,37 @@ local function countQuery<T...>(query: jecs.Query<T...>)
     return count
 end
 
+local function findScriptFromSource(path: string)
+    -- Path is "ServerScriptService.ScriptName"
+    local instance: any = game
+    for path in path:gmatch("[^%.]+") do
+        instance = instance:FindFirstChild(path)
+        if instance == nil then
+            error("Could not find script from source path: " .. path)
+        end
+    end
+    return instance :: LuaSourceContainer
+end
+
 return function(workers: number, world: jecs.World)
     local work_group = {}
 
+    local parent = script
+    local script = findScriptFromSource(debug.info(2, "s"))
+    local actor = script:FindFirstAncestorWhichIsA("Actor")
+
+    if not actor then
+        error("This function must be called from an Actor script.")
+    end
+
     -- get some unique name for the work group
     local name = tostring(work_group)
-    local sharedTable = SharedTableRegistry:GetSharedTable(name)
+    -- local sharedTable = SharedTableRegistry:GetSharedTable(name)
 
     for i = 1, workers do
         local worker = Worker:Clone()
         worker.Name = name .. "_" .. i
-        worker.Parent = script;
+        worker.Parent = parent;
         (worker:FindFirstChild("Worker") :: LocalScript).Enabled = true
         table.insert(work_group, worker)
     end
@@ -36,10 +56,49 @@ return function(workers: number, world: jecs.World)
 
     local loaded : { [ModuleScript]: boolean? } = {}
 
+    local partitions = {}
+    for i = 1, workers do
+        partitions[i] = table.create(100)
+    end
+
+    local componentCount = 0
+    local components = {}
+    local partitionsDone = 0
+    local partitionIndex = 0
+
+    local running = coroutine.running()
+    local connection = actor:BindToMessageParallel("receive", function(id: number, partition: { any })
+        debug.profilebegin("Partition Received")
+        local columns_map = nil
+        for i = 1, #partition, componentCount + 1 do
+            local entity = partition[i]
+            local record = jecs.entity_index_try_get(world.entity_index, entity) :: jecs.Record
+            if not record then continue end
+            if not columns_map then
+                columns_map = record.archetype.columns_map
+            end
+            
+            columns_map[components[1]][record.row] = partition[i + 1]
+            -- for j = 1, componentCount do
+            --     columns_map[components[j]][record.row] = partition[i + j]
+            -- end
+        end
+        partitionsDone += 1
+        debug.profileend()
+        if partitionsDone >= partitionIndex then
+            task.synchronize()
+            task.spawn(running)
+        end
+    end)
+
     return function<T...>(query: jecs.Query<T...>, callback: ModuleScript)
         debug.profilebegin("Intro Work")
         local inner = (query :: any) :: jecs.QueryInner
-        local running = coroutine.running()
+        
+        running = coroutine.running()
+        partitionsDone = 0
+        components = inner.ids
+        componentCount = #inner.ids
         
         if not loaded[callback] then
             loaded[callback] = true
@@ -49,14 +108,10 @@ return function(workers: number, world: jecs.World)
             end
         end
 
-        local components = {}
-        local componentCount = #inner.ids
+        local componentMap = {}
         for i, componentId in inner.ids do
-            components[i] = {
-                componentId,
-                world:get(componentId, jecs.Name) :: any
-            }
-        end
+            componentMap[world:get(componentId, jecs.Name)] = i
+        end        
 
         local count = countQuery(query :: any)
         if count == 0 then
@@ -67,64 +122,36 @@ return function(workers: number, world: jecs.World)
 
         -- loop through query and split into partitions
         debug.profilebegin("Partition Creation")
-        local distribution = math.ceil(count / #work_group)
-        local partiationIndex = 1
-        local paritionCount = 0
-        local partition = table.create(distribution) :: any
-        if componentCount == 2 then
-            for entity, a, b in query do
-                if paritionCount >= distribution then
-                    debug.profilebegin("Partition Flush")
-                    partition["count"] = paritionCount
-                    sharedTable[partiationIndex] = SharedTable.new(partition)
-                    paritionCount = 0
-                    partiationIndex += 1
-                    table.clear(partition)
-                    debug.profileend()
-                end
-                
-                debug.profilebegin("Partition Add")
-                local offset = paritionCount * (componentCount + 1)
-                partition[offset] = entity
-                partition[offset + 1] = a
-                partition[offset + 2] = b
-                paritionCount += 1
+        local distribution = math.max(math.ceil(count / #work_group), 10)
+        partitionIndex = 1
+        local partitionCount = 0
+        local partition = partitions[partitionIndex]
+
+        for entity, a, b in query do
+            local offset = partitionCount * (componentCount + 1) + 1
+            partition[offset] = entity
+            partition[offset + 1] = a
+            partition[offset + 2] = b
+            partitionCount += 1
+
+            if partitionCount >= distribution then
+                debug.profilebegin("Send Partition")
+                work_group[partitionIndex]:SendMessage("run", actor, callback, componentMap, partitionCount, partition)
+                partitionIndex += 1
+                partitionCount = 0
+                partition = partitions[partitionIndex]
                 debug.profileend()
             end
-            debug.profilebegin("Partition Flush")
-            partition["count"] = paritionCount
-            sharedTable[partiationIndex] = SharedTable.new(partition)
+        end
+        if partitionCount > 0 then
+            debug.profilebegin("Send Partition")
+            work_group[partitionIndex]:SendMessage("run", actor, callback, componentMap, partitionCount, partition)
             debug.profileend()
+        else
+            partitionIndex -= 1
         end
         debug.profileend()
 
-        debug.profilebegin("Schedule Parallel Work")
-        for i = 1, partiationIndex do
-            work_group[i]:SendMessage("run", callback, components)
-        end
-        debug.profileend()
-
-        task.delay(0, function()
-            -- synchronize with workers
-            debug.profilebegin("Synchronize Workers")
-            for i = 1, partiationIndex do
-                local partition = sharedTable[i]
-                local count = partition["count"]
-
-                for j = 1, count do
-                    local offset = (j - 1) * (componentCount + 1)
-                    local entity = partition[offset]
-
-                    for k = 1, componentCount do
-                        local component = partition[offset + k]
-                        world:set(entity, components[k][1], component)
-                    end
-                end
-            end
-            debug.profileend()
-
-            coroutine.resume(running)
-        end)
         coroutine.yield(running)
     end
 end
