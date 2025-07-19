@@ -1,8 +1,22 @@
 
 local process = require("@lune/process")
 local task = require("@lune/task")
+local fs = require("@lune/fs")
 
 local processssss : {[string]: process.ChildProcess} = {}
+
+if not fs.isDir("out") then
+    fs.writeDir("out")
+end
+
+-- copy meta files
+fs.copy("src", "out", {
+    overwrite = true,
+})
+-- copy packages
+fs.copy("Packages", "out/Packages", {
+    overwrite = true,
+})
 
 local function maybeWatch(program: string, params: { string }) : process.ChildProcess
     local result = process.exec(program, params)

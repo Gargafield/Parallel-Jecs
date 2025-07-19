@@ -10,10 +10,10 @@ return function(world: jecs.World, components: { [string]: jecs.Entity }, query:
     debug.profilebegin("Update")
     local Position = components["Position"]
     for entity, position, velocity in query do
-        -- local sum = vector.zero
-        -- for i = 1, 10 do
-        --     sum += velocity * deltaTime
-        -- end
+        if position.y > 255 then
+            position = vector.create(position.x, 0)
+        end
+        workspace:Raycast(Vector3.zero, Vector3.yAxis * 100)
         world:set(entity, Position, position + velocity * deltaTime)
     end
     debug.profileend()

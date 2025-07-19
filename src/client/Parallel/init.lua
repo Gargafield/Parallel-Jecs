@@ -1,4 +1,14 @@
-local SharedTableRegistry = game:GetService("SharedTableRegistry")
+--[[
+    The general idea is to split rows of an archetype into partitions and send them to
+    parallel workers, which will then process them and return the result to the main thread.
+
+    The structure of the archetype is still kept. The data sent to the workers contains the same
+    column structure as the archetype. This means that `table.move` can be abused to
+    move large amounts of data. When the data is to be joined back together, the workers will send
+    their data back to the main thread, which will lastly stitch the data together.
+    This is done by clearing the archetype columns and, again, abusing `table.move` to
+    move the data back into the cleared columns. The keeps the column references intact.
+--]]
 
 local jecs = require("@Packages/Jecs")
 
@@ -14,7 +24,6 @@ local function countQuery<T...>(query: jecs.Query<T...>)
 end
 
 local function findScriptFromSource(path: string)
-    -- Path is "ServerScriptService.ScriptName"
     local instance: any = game
     for path in path:gmatch("[^%.]+") do
         instance = instance:FindFirstChild(path)
@@ -38,7 +47,6 @@ return function(workers: number, world: jecs.World)
 
     -- get some unique name for the work group
     local name = tostring(work_group)
-    -- local sharedTable = SharedTableRegistry:GetSharedTable(name)
 
     for i = 1, workers do
         local worker = Worker:Clone()
@@ -61,8 +69,6 @@ return function(workers: number, world: jecs.World)
         partitions[i] = {}
     end
 
-    local componentCount = 0
-    local components = {}
     local partitionsDone = 0
     local partitionIndex = 0
     local recieved_partitions = {}
@@ -73,14 +79,14 @@ return function(workers: number, world: jecs.World)
     local count = 0
 
     local running = coroutine.running()
-    local connection = actor:BindToMessage("receive", function(id: number, partition: { any })
+    actor:BindToMessage("receive", function(id: number, partition: { any })
         debug.profilebegin("Partition Received")
         recieved_partitions[id] = partition
         partitionsDone += 1
         debug.profileend()
         if partitionsDone >= partitionIndex then
             debug.profilebegin("Join Partitions")
-            for i = 1, workers do
+            for i = 1, partitionIndex do
                 for j = 1, #used_columns do
                     table.move(
                         recieved_partitions[i][j],
@@ -119,8 +125,6 @@ return function(workers: number, world: jecs.World)
         running = coroutine.running()
         partitionsDone = 0
         partitionIndex = 0
-        components = inner.ids
-        componentCount = #inner.ids
         
         if not loaded[callback] then
             loaded[callback] = true

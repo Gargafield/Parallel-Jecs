@@ -2,6 +2,9 @@
 --!optimize 2
 --!strict
 
+local PARALLEL = true
+local WORKERS = 16
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -53,140 +56,96 @@ end
 
 local Parallel = require("@client/Parallel")
 
-local parallel = Parallel(8, world)
+local maxCount = 10000
+local spawnCount = math.max(math.round(maxCount / 666), 1)
+local count = 0
 
-local maxCount = 50000
-local spawnCount = 100
-
-local function countQuery<T...>(query: jecs.Query<T...>)
-    local archetypes = query:archetypes()
-    local count = 0
-    for _, archetype in archetypes do
-        count += #archetype.entities
-    end
-    return count
-end
-
--- local deltaTime = 1 / 60
--- while true do
---     task.wait()
---     local start = os.clock()
---     canvas:Clear()
---     debug.profilebegin("Render")
---     debug.profilebegin("QueryRender")
---     local query = world:query(Position, Color)
---     debug.profileend()
---     for entity, position, color in query do
---         debug.profilebegin("SetPixel")
---         canvas:SetPixel(math.clamp(math.floor(position.x), 0, 255), math.clamp(math.floor(position.y), 0, 255), color)
---         debug.profileend()
---     end
---     debug.profileend()
-
---     canvas:Render()
-
---     local count = countQuery(world:query(Position))
---     if count < maxCount then
---         debug.profilebegin("Spawn")
---         for i = 1, math.min(spawnCount, maxCount - count) do
---             local entity = world:entity()
---             jecs.bulk_insert(world, entity, { Position, Velocity, Color }, {
---                 vector.create(math.random(0, 255), 0),
---                 vector.create(0, 25),
---                 Colors[math.random(1, #Colors)]
---             })
---             count += 1
---         end
---         debug.profileend()
---         print(count)
---     end
-
---     debug.profilebegin("Delete")
---     debug.profilebegin("Query")
---     local query = world:query(Position)
---     debug.profileend()
---     for entity, position in query do
---         debug.profilebegin("CheckPosition")
---         if position.y > 255 then
---             world:delete(entity)
---             count -= 1
---             debug.profileend()
---             continue
---         end
---         debug.profileend()
---     end
---     debug.profileend()
-
---     debug.profilebegin("Update")
---     debug.profilebegin("QueryUpdate")
---     local query = world:query(Position, Velocity)
---     debug.profileend()
---     for entity, position, velocity in query do
---         debug.profilebegin("UpdatePosition")
---         -- local sum = vector.zero
---         -- for i = 1, 10 do
---         --     sum += velocity * deltaTime
---         -- end
---         world:set(entity, Position, position + velocity * deltaTime)
---         debug.profileend()
---     end
---     debug.profileend()
---     local stop = os.clock()
---     print("Frame time:", (stop - start) * 1000)
--- end
-
-while true do
-    task.wait()
-    local start = os.clock()
-    canvas:Clear()
-    debug.profilebegin("Render")
-    debug.profilebegin("QueryRender")
-    local query = world:query(Position, Color)
-    debug.profileend()
-    for entity, position, color in query do
-        debug.profilebegin("SetPixel")
-        canvas:SetPixel(math.clamp(math.floor(position.x), 0, 255), math.clamp(math.floor(position.y), 0, 255), color)
+if not PARALLEL then
+    local deltaTime = 1 / 60
+    while true do
+        task.wait()
+        local start = os.clock()
+        canvas:Clear()
+        debug.profilebegin("Render")
+        debug.profilebegin("Query")
+        local query = world:query(Position, Color)
         debug.profileend()
-    end
-    debug.profileend()
+        for entity, position, color in query do
+            canvas:SetPixel(math.clamp(math.floor(position.x), 0, 255), math.clamp(math.floor(position.y), 0, 255), color)
+        end
+        debug.profilebegin("Render")
+        canvas:Render()
+        debug.profileend()
+        debug.profileend()
 
-    canvas:Render()
+        if count < maxCount then
+            debug.profilebegin("Spawn")
+            for i = 1, math.min(spawnCount, maxCount - count) do
+                local entity = world:entity()
+                jecs.bulk_insert(world, entity, { Position, Velocity, Color }, {
+                    vector.create(math.random(0, 255), 0),
+                    vector.create(0, 25),
+                    Colors[math.random(1, #Colors)]
+                })
+                count += 1
+            end
+            debug.profileend()
+        end
 
-    local count = countQuery(world:query(Position))
-    print("Count", count)
-    if count < maxCount then
-        debug.profilebegin("Spawn")
-        for i = 1, math.min(spawnCount, maxCount - count) do
-            local entity = world:entity()
-            jecs.bulk_insert(world, entity, { Position, Velocity, Color }, {
-                vector.create(math.random(0, 255), 0),
-                vector.create(0, 25),
-                Colors[math.random(1, #Colors)]
-            })
-            count += 1
+        debug.profilebegin("Update")
+        debug.profilebegin("Query")
+        local query = world:query(Position, Velocity)
+        debug.profileend()
+        for entity, position, velocity in query do
+            if position.y > 255 then
+                position = vector.create(position.x, 0)
+            end
+            workspace:Raycast(Vector3.zero, Vector3.yAxis * 100)
+            world:set(entity, Position, position + velocity * deltaTime)
         end
         debug.profileend()
+        local stop = os.clock()
+        print("Frame time:", (stop - start) * 1000)
         print(count)
     end
+else
+    local parallel = Parallel(WORKERS, world)
 
-    debug.profilebegin("Delete")
-    debug.profilebegin("Query")
-    local query = world:query(Position)
-    debug.profileend()
-    local first = true
-    for entity, position in query do
-        debug.profilebegin("CheckPosition")
-        if position.y > 255 then
-            world:delete(entity)
-            count -= 1
-            debug.profileend()
-            continue
-        end
+    while true do
+        task.wait()
+        local start = os.clock()
+        canvas:Clear()
+        debug.profilebegin("Render")
+        debug.profilebegin("Query")
+        local query = world:query(Position, Color)
         debug.profileend()
-    end
-    debug.profileend()
+        for entity, position, color in query do
+            canvas:SetPixel(math.clamp(math.floor(position.x), 0, 255), math.clamp(math.floor(position.y), 0, 255), color)
+        end
+        debug.profilebegin("Render")
+        canvas:Render()
+        debug.profileend()
+        debug.profileend()
 
-    parallel(world:query(Position, Velocity), UpdatePosition)
-    local stop = os.clock()
-    print("Frame time:", (stop - start) * 1000)
+
+        if count < maxCount then
+            debug.profilebegin("Spawn")
+            for i = 1, math.min(spawnCount, maxCount - count) do
+                local entity = world:entity()
+                jecs.bulk_insert(world, entity, { Position, Velocity, Color }, {
+                    vector.create(math.random(0, 255), 0),
+                    vector.create(0, 25),
+                    Colors[math.random(1, #Colors)]
+                })
+                count += 1
+            end
+            debug.profileend()
+        end
+
+        parallel(world:query(Position, Velocity), UpdatePosition)
+        local stop = os.clock()
+        print("Frame time:", (stop - start) * 1000)
+        print(count)
+    end
 end
+
