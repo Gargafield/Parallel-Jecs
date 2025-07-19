@@ -2,9 +2,9 @@
 
 ![image of the roblox microprofiler showing lots of parallel work](media/parallel-work.png)
 
-Small demo of running a query in parallel and syncing back to [jecs](https://github.com/Ukendio/jecs).
+Small demo of running a query in parallel and syncing back to [Jecs](https://github.com/Ukendio/jecs).
 
-What's the current performane of parallel vs serial (as of 19-07-2025)?
+What's the current performance of parallel vs serial (as of 19-07-2025)?
 * Best Case
     - **This benchmark is very synthetic, and doesn't represent real world use!**
     - 10000 entities, each raycasting every step (heavy work)
@@ -12,13 +12,13 @@ What's the current performane of parallel vs serial (as of 19-07-2025)?
     - Serial: 14-15ms
 * Worst Case
     - **This benchmark is very synthetic, and doesn't represent real world use!**
-    - 100000 entities, updating updating a single field
+    - 100000 entities, updating a single field (very light work)
     - Parallel: 26ms
     - Serial: 22ms
 
 ## Installation
 
-There's a lot of different cli used, consider using [Rokit](https://github.com/rojo-rbx/rokit) to install them.
+There's a lot of different CLI's tools used, consider using [Rokit](https://github.com/rojo-rbx/rokit) to install them.
 
 1. Clone repository
 2. Install toolchain using `rokit install`
@@ -26,7 +26,7 @@ There's a lot of different cli used, consider using [Rokit](https://github.com/r
 5. Run watch with Lune `lune run .\scripts\watch`
 6. Connect with Rojo in a Roblox Studio
 
-[Darklua](https://github.com/seaofvoices/darklua) is used to transform string required for now™. 
+[Darklua](https://github.com/seaofvoices/darklua) is needed to transform string required for now™. 
 
 You can optionally run `wally-package-types.exe --sourcemap sourcemap.json .\Packages\` to generate types.
 
