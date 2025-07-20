@@ -60,6 +60,23 @@ local maxCount = 10000
 local spawnCount = math.max(math.round(maxCount / 666), 1)
 local count = 0
 
+local frames = {}
+local frameCounter = 0
+local function averageFrameTime(lastFrameTime: number)
+    frameCounter += 1
+    frames[frameCounter] = lastFrameTime
+    if frameCounter > 60 then
+        frameCounter = 1
+    end
+
+    local total = 0
+    for i = 1, #frames do
+        total += frames[i]
+    end
+
+    return total / #frames
+end
+
 if not PARALLEL then
     local deltaTime = 1 / 60
     while true do
@@ -105,7 +122,7 @@ if not PARALLEL then
         end
         debug.profileend()
         local stop = os.clock()
-        print("Frame time:", (stop - start) * 1000)
+        print("Frame time:", averageFrameTime((stop - start) * 1000))
         print(count)
     end
 else
@@ -144,7 +161,7 @@ else
 
         parallel(world:query(Position, Velocity), UpdatePosition)
         local stop = os.clock()
-        print("Frame time:", (stop - start) * 1000)
+        print("Frame time:", averageFrameTime((stop - start) * 1000))
         print(count)
     end
 end
