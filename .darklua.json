@@ -18,7 +18,6 @@
                 "indexing_style": "property"
             }
         },
-        "remove_comments",
         "compute_expression",
         "remove_unused_if_branch",
         "remove_unused_while",

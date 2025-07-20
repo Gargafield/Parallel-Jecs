@@ -3,7 +3,7 @@
 --!strict
 
 local PARALLEL = true
-local WORKERS = 16
+local WORKERS = 8
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")

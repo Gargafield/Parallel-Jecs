@@ -1,3 +1,7 @@
+--!native
+--!optimize 2
+-- without, buffer operations are super slow
+
 --[[
     The general idea is to split rows of an archetype into partitions and send them to
     parallel workers, which will then process them and return the result to the main thread.

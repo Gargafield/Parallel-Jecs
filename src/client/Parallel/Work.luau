@@ -1,9 +1,11 @@
+--!optimize 2
+--!native
+
 local SharedTableRegistry = game:GetService("SharedTableRegistry")
 
 return function(actor: Actor)
     local name: string
     local id: number
-    local sharedTable : SharedTable
 
     local modules = {}
 
@@ -11,7 +13,6 @@ return function(actor: Actor)
         print(`{_id}: Initializing worker {_name}`)
         name = _name
         id = _id
-        sharedTable = SharedTableRegistry:GetSharedTable(_name)
     end)
 
     actor:BindToMessage("load", function(module: ModuleScript)
