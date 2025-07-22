@@ -8,13 +8,13 @@ What's the current performance of parallel vs serial (as of 19-07-2025)?
 * Best Case
     - **This benchmark is very synthetic, and doesn't represent real world use!**
     - 10000 entities, each raycasting every step (heavy work)
-    - Parallel: 4-6ms
-    - Serial: 14-15ms
+    - Parallel: 5.6 ms
+    - Serial: 14.7 ms
 * Worst Case
     - **This benchmark is very synthetic, and doesn't represent real world use!**
     - 100000 entities, updating a single field (very light work)
-    - Parallel: 26ms
-    - Serial: 22ms
+    - Parallel: 19.7ms
+    - Serial: 18.5ms
 
 ## Installation
 
