@@ -15,6 +15,7 @@
 --]]
 
 local jecs = require("@Packages/Jecs")
+local Serdes = require("@client/Parallel/Serdes")
 
 local Worker : Actor = script:WaitForChild("Worker") :: Actor
 
@@ -68,38 +69,28 @@ return function(workers: number, world: jecs.World)
 
     local loaded : { [ModuleScript]: boolean? } = {}
 
-    local partitions = {}
-    for i = 1, workers do
-        partitions[i] = {}
-    end
-
     local partitionsDone = 0
-    local partitionIndex = 0
+    local partitionNum = 0
     local recieved_partitions = {}
     local recieved_columns = {}
     local archetype : jecs.Archetype = nil
-    local used_columns = {}
-    local columns : { { { number } } } = {}
+    local used_columns: { { any } } = {}
+    -- local columns : { { { any } } } = {}
+
+    local buffers, partitions, types
+
     local count = 0
 
     local running = coroutine.running()
-    actor:BindToMessage("receive", function(id: number, partition: { any })
+    actor:BindToMessage("receive", function(id: number, buf: buffer)
         debug.profilebegin("Partition Received")
-        recieved_partitions[id] = partition
+        recieved_partitions[id] = buf
         partitionsDone += 1
         debug.profileend()
-        if partitionsDone >= partitionIndex then
+        if partitionsDone >= partitionNum then
             debug.profilebegin("Join Partitions")
-            for i = 1, partitionIndex do
-                for j = 1, #used_columns do
-                    table.move(
-                        recieved_partitions[i][j],
-                        1,
-                        columns[j][i][2],
-                        columns[j][i][1],
-                        recieved_columns[j]
-                    )
-                end
+            for i = 1, partitionNum do
+                Serdes.deserializeColumnsInto(recieved_columns, recieved_partitions[i], types, partitions[i][2], partitions[i][1])
             end
             for i = 1, #used_columns do
                 table.clear(used_columns[i])
@@ -128,7 +119,7 @@ return function(workers: number, world: jecs.World)
 
         running = coroutine.running()
         partitionsDone = 0
-        partitionIndex = 0
+        partitionNum = 0
         
         if not loaded[callback] then
             loaded[callback] = true
@@ -157,56 +148,21 @@ return function(workers: number, world: jecs.World)
         table.clear(used_columns)
         for i = 1, #inner.ids do
             used_columns[i] = archetype.columns_map[inner.ids[i]]
-        end
-
-        local distribution = math.max(math.ceil(count / #work_group), 10)
-        for i = 1, #used_columns do
-            if not columns[i] then
-                columns[i] = {}
-                for j = 1, workers do
-                    columns[i][j] = { 1, 1 }
-                end
-            else
-                for j = 1, workers do
-                    columns[i][j][1] = 1
-                    columns[i][j][2] = 1
-                end
-            end
+            
             if not recieved_columns[i] then
                 recieved_columns[i] = table.create(count)
             else
                 table.clear(recieved_columns[i])
             end
         end
+
         debug.profileend()
         debug.profilebegin("Partition Creation")
-        local counter = count
-        for i = 1, workers do
-            local localDistribution = math.min(counter, distribution)
-            if localDistribution <= 0 then break end
-            debug.profilebegin("Column Move")
-            for j = 1, #used_columns do
-                if not partitions[i][j] then
-                    partitions[i][j] = table.create(localDistribution)
-                else
-                    table.clear(partitions[i][j])
-                end
-                local index = count - counter + 1
-                
-                table.move(
-                    used_columns[j],
-                    index,
-                    index + localDistribution,
-                    1,
-                    partitions[i][j]
-                )
-                columns[j][i][1] = index
-                columns[j][i][2] = localDistribution
-            end
-            counter -= localDistribution
-            debug.profileend()
-            partitionIndex += 1
-            work_group[i]:SendMessage("run", actor, callback, componentMap, localDistribution, partitions[i])
+        local distribution = math.max(math.ceil(count / #work_group), 10)
+        buffers, partitions, types = Serdes.serializeColumnsFast(used_columns, count,  distribution)
+        partitionNum = #partitions
+        for i = 1, #buffers do
+            work_group[i]:SendMessage("run", actor, callback, componentMap, partitions[i][2], types, buffers[i])
         end
         debug.profileend()
 

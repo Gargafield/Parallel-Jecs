@@ -1,7 +1,7 @@
 --!optimize 2
 --!native
 
-local SharedTableRegistry = game:GetService("SharedTableRegistry")
+local Serdes = require("@client/Parallel/Serdes")
 
 return function(actor: Actor)
     local name: string
@@ -21,7 +21,8 @@ return function(actor: Actor)
         modules[module] = require(module) :: any
     end)
 
-    actor:BindToMessageParallel("run", function(caller: Actor, module: ModuleScript, componentMap: { [string]: number }, count: number, columns: { { any } })
+    local columns = {}
+    actor:BindToMessageParallel("run", function(caller: Actor, module: ModuleScript, componentMap: { [string]: number }, count: number, types: { number }, buf: buffer)
         -- print(`{id}: Running module {module.Name}`)
         local func = modules[module]
         if not func then
@@ -32,6 +33,8 @@ return function(actor: Actor)
         for _, _ in componentMap do
             componentCount += 1
         end
+
+        Serdes.deserializeColumnsInto(columns, buf, types, count)
         
         local world = {
             set = function(self, entity: number, component, value: any)
@@ -50,6 +53,8 @@ return function(actor: Actor)
             return entity, columns[1][entity], columns[2][entity]
         end)
 
-        caller:SendMessage("receive", id, columns)
+        Serdes.serializeColumnsInto(buf, columns, 1, count)
+
+        caller:SendMessage("receive", id, buf)
     end)
 end
